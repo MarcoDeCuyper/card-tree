@@ -100,6 +100,11 @@
       </div>
     `;
     document.getElementById('f-title').focus();
+    container.querySelectorAll('input').forEach(input => {
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('f-save').click();
+  });
+});
     document.getElementById('f-save').addEventListener('click', () => {
       const title = document.getElementById('f-title').value.trim();
       if (!title) return;
