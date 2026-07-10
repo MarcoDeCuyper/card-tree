@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Card Tree</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f5f5f4;
+    margin: 0;
+    padding: 2rem 1rem;
+    display: flex;
+    justify-content: center;
+  }
+  .ct-wrap { max-width: 600px; width: 100%; }
+  .ct-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+  .ct-toolbar h1 { font-size: 18px; font-weight: 500; margin: 0; color: #1a1a1a; }
+  .ct-children { margin-left: 20px; padding-left: 14px; border-left: 1px solid #e5e5e3; margin-top: 8px; }
+  .ct-card { background: #fff; border: 0.5px solid #e5e5e3; border-radius: 0 10px 10px 0; padding: 10px 12px; margin-bottom: 8px; }
+  .ct-card.d0 { border-left: 2px solid #1D9E75; }
+  .ct-card.d1 { border-left: 2px solid #378ADD; }
+  .ct-card.d2 { border-left: 2px solid #7F77DD; }
+  .ct-card.d3 { border-left: 2px solid #D85A30; }
+  .ct-card.d4 { border-left: 2px solid #D4537E; }
+  .ct-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .ct-card-title { font-size: 14px; font-weight: 500; color: #1a1a1a; margin: 0 0 6px; }
+  .ct-card-meta { display: flex; gap: 12px; }
+  .ct-card-meta span { font-size: 12px; color: #666; display: flex; align-items: center; gap: 4px; }
+  .ct-card-meta i { font-size: 12px; }
+  .ct-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .ct-actions button { background: none; border: none; cursor: pointer; color: #888; padding: 2px 4px; border-radius: 4px; font-size: 14px; }
+  .ct-actions button:hover { background: #f5f5f4; color: #1a1a1a; }
+  .ct-form { background: #fafaf9; border: 0.5px solid #e5e5e3; border-radius: 10px; padding: 12px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 8px; }
+  .ct-form input { font-size: 14px; padding: 8px 10px; border: 1px solid #d4d4d2; border-radius: 8px; outline: none; width: 100%; }
+  .ct-form input:focus { border-color: #1D9E75; }
+  .ct-form-row { display: flex; gap: 8px; }
+  .ct-form-row input { flex: 1; font-size: 13px; }
+  .ct-form-actions { display: flex; gap: 6px; justify-content: flex-end; }
+  .ct-form-actions button { font-size: 13px; padding: 6px 14px; border-radius: 8px; cursor: pointer; border: 1px solid #d4d4d2; background: #fff; }
+  .ct-form-actions button.primary { background: #1D9E75; color: #fff; border-color: #1D9E75; }
+  .ct-form-actions button.primary:hover { background: #18835f; }
+  .ct-add-root { font-size: 14px; font-weight: 500; padding: 8px 14px; border-radius: 8px; cursor: pointer; border: 1px solid #d4d4d2; background: #fff; display: flex; align-items: center; gap: 6px; }
+  .ct-add-root:hover { background: #f5f5f4; }
+  .ct-empty { font-size: 14px; color: #999; padding: 1rem 0; }
+</style>
+</head>
+<body>
+<div class="ct-wrap">
+  <div class="ct-toolbar">
+    <h1>My projects</h1>
+    <button class="ct-add-root" id="addRootBtn">
+      <i class="ti ti-plus" style="font-size:13px;"></i> Add card
+    </button>
+  </div>
+  <div id="formRoot"></div>
+  <div id="tree"></div>
+</div>
+
+<script>
+  const STORAGE_KEY = 'cardtree_data';
+  const MAX_DEPTH = 4;
+  let nextId = 1;
+
+  function loadData() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        nextId = parsed.nextId || 1;
+        return parsed.cards || [];
+      }
+    } catch(e) {}
+    return [];
+  }
+
+  function saveData(cards) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ cards, nextId }));
+  }
+
+  function makeCard(title, dueDate, timeNeeded) {
+    return { id: nextId++, title, dueDate, timeNeeded, children: [] };
+  }
+
+  function renderForm(containerId, onSave, onCancel, defaults = {}) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = `
+      <div class="ct-form">
+        <input id="f-title" type="text" placeholder="Card title" value="${defaults.title || ''}" />
+        <div class="ct-form-row">
+          <input id="f-due" type="date" value="${defaults.dueDate || ''}" />
+          <input id="f-time" type="text" placeholder="Time needed (e.g. 2h)" value="${defaults.timeNeeded || ''}" />
+        </div>
+        <div class="ct-form-actions">
+          <button id="f-cancel">Cancel</button>
+          <button id="f-save" class="primary">Save</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('f-title').focus();
+    document.getElementById('f-save').addEventListener('click', () => {
+      const title = document.getElementById('f-title').value.trim();
+      if (!title) return;
+      onSave(title, document.getElementById('f-due').value, document.getElementById('f-time').value.trim());
+      container.innerHTML = '';
+    });
+    document.getElementById('f-cancel').addEventListener('click', () => {
+      container.innerHTML = '';
+      onCancel && onCancel();
+    });
+  }
+
+  function renderTree(cards, container, depth) {
+    cards.forEach(card => {
+      const cardEl = document.createElement('div');
+      const formId = `form-${card.id}`;
+      const childrenId = `children-${card.id}`;
+      const metaDate = card.dueDate ? `<span><i class="ti ti-calendar"></i> ${card.dueDate}</span>` : '';
+      const metaTime = card.timeNeeded ? `<span><i class="ti ti-clock"></i> ${card.timeNeeded}</span>` : '';
+      const addBtn = depth < MAX_DEPTH
+        ? `<button class="btn-add" data-id="${card.id}" aria-label="Add sub-card"><i class="ti ti-plus"></i></button>`
+        : '';
+
+      cardEl.innerHTML = `
+        <div class="ct-card d${depth}">
+          <div class="ct-card-header">
+            <p class="ct-card-title">${card.title}</p>
+            <div class="ct-actions">
+              <button class="btn-edit" data-id="${card.id}" aria-label="Edit"><i class="ti ti-pencil"></i></button>
+              ${addBtn}
+            </div>
+          </div>
+          <div class="ct-card-meta">${metaDate}${metaTime}</div>
+        </div>
+        <div id="${formId}"></div>
+        <div id="${childrenId}" class="ct-children" style="display:${card.children.length ? 'block' : 'none'}"></div>
+      `;
+
+      container.appendChild(cardEl);
+
+      if (card.children.length) {
+        renderTree(card.children, document.getElementById(childrenId), depth + 1);
+      }
+
+      cardEl.querySelector('.btn-edit').addEventListener('click', () => {
+        renderForm(formId, (title, dueDate, timeNeeded) => {
+          card.title = title;
+          card.dueDate = dueDate;
+          card.timeNeeded = timeNeeded;
+          saveData(cards_root);
+          render();
+        }, null, card);
+      });
+
+      const addBtnEl = cardEl.querySelector('.btn-add');
+      if (addBtnEl) {
+        addBtnEl.addEventListener('click', () => {
+          const childContainer = document.getElementById(childrenId);
+          childContainer.style.display = 'block';
+          const subFormId = `subform-${card.id}`;
+          let subFormEl = document.getElementById(subFormId);
+          if (!subFormEl) {
+            subFormEl = document.createElement('div');
+            subFormEl.id = subFormId;
+            childContainer.prepend(subFormEl);
+          }
+          renderForm(subFormId, (title, dueDate, timeNeeded) => {
+            card.children.push(makeCard(title, dueDate, timeNeeded));
+            saveData(cards_root);
+            render();
+          }, () => {
+            if (!card.children.length) childContainer.style.display = 'none';
+          });
+        });
+      }
+    });
+  }
+
+  let cards_root = loadData();
+
+  function render() {
+    const tree = document.getElementById('tree');
+    tree.innerHTML = '';
+    if (cards_root.length === 0) {
+      tree.innerHTML = '<p class="ct-empty">No cards yet — add one above to get started.</p>';
+      return;
+    }
+    renderTree(cards_root, tree, 0);
+  }
+
+  document.getElementById('addRootBtn').addEventListener('click', () => {
+    renderForm('formRoot', (title, dueDate, timeNeeded) => {
+      cards_root.push(makeCard(title, dueDate, timeNeeded));
+      saveData(cards_root);
+      render();
+    }, null);
+  });
+
+  render();
+</script>
+</body>
+</html>
