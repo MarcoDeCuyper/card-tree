@@ -80,9 +80,38 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ cards, nextId }));
   }
 
-  function makeCard(title, dueDate, timeNeeded) {
-    return { id: nextId++, title, dueDate, timeNeeded, children: [] };
+  function parseTime(input) {
+  if (!input || !input.trim()) return 5;
+  const s = input.trim().toLowerCase();
+  const num = parseFloat(s);
+  if (isNaN(num)) return 5;
+  if (s.includes('d')) return Math.round(num * 480);
+  if (s.includes('h')) return Math.round(num * 60);
+  return Math.round(num);
+}
+
+function formatTime(minutes) {
+  if (!minutes) return '5m';
+  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 480) {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return m === 0 ? `${h}h` : `${h}h${m}m`;
   }
+  const d = Math.floor(minutes / 480);
+  const remaining = minutes % 480;
+  const h = Math.floor(remaining / 60);
+  return h === 0 ? `${d}d` : `${d}d${h}h`;
+}
+
+function sumTime(card) {
+  const own = card.timeNeeded || 5;
+  return card.children.reduce((total, child) => total + sumTime(child), own);
+}
+
+ function makeCard(title, dueDate, timeNeeded) {
+  return { id: nextId++, title, dueDate, timeNeeded: parseTime(timeNeeded), children: [] };
+}
 
   function renderForm(containerId, onSave, onCancel, defaults = {}) {
     const container = document.getElementById(containerId);
@@ -91,7 +120,7 @@
         <input id="f-title" type="text" placeholder="Card title" value="${defaults.title || ''}" />
         <div class="ct-form-row">
           <input id="f-due" type="date" value="${defaults.dueDate || ''}" />
-          <input id="f-time" type="text" placeholder="Time needed (e.g. 2h)" value="${defaults.timeNeeded || ''}" />
+          <input id="f-time" type="text" placeholder="Time needed (e.g. 2h)" value="${defaults.timeNeeded ? formatTime(defaults.timeNeeded) : ''}" />
         </div>
         <div class="ct-form-actions">
           <button id="f-cancel">Cancel</button>
@@ -123,7 +152,8 @@
       const formId = `form-${card.id}`;
       const childrenId = `children-${card.id}`;
       const metaDate = card.dueDate ? `<span><i class="ti ti-calendar"></i> ${card.dueDate}</span>` : '';
-      const metaTime = card.timeNeeded ? `<span><i class="ti ti-clock"></i> ${card.timeNeeded}</span>` : '';
+      const total = sumTime(card);
+      const metaTime = `<span><i class="ti ti-clock"></i> ${formatTime(total)}</span>`;
       const addBtn = depth < MAX_DEPTH
         ? `<button class="btn-add" data-id="${card.id}" aria-label="Add sub-card"><i class="ti ti-plus"></i></button>`
         : '';
@@ -153,7 +183,7 @@
         renderForm(formId, (title, dueDate, timeNeeded) => {
           card.title = title;
           card.dueDate = dueDate;
-          card.timeNeeded = timeNeeded;
+          card.timeNeeded = parseTime(timeNeeded);
           saveData(cards_root);
           render();
         }, null, card);
