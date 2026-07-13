@@ -25,6 +25,11 @@
   .ct-card.d2 { border-left: 2px solid #7F77DD; }
   .ct-card.d3 { border-left: 2px solid #D85A30; }
   .ct-card.d4 { border-left: 2px solid #D4537E; }
+
+  .ct-card.done { opacity: 0.5; }
+  .ct-card.done .ct-card-title { text-decoration: none; color: #1D9E75; }
+  .btn-done.is-done { color: #1D9E75; }
+
   .ct-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
   .ct-card-title { font-size: 14px; font-weight: 500; color: #1a1a1a; margin: 0 0 6px; }
   .ct-card-meta { display: flex; gap: 12px; }
@@ -104,6 +109,11 @@ function formatTime(minutes) {
   return h === 0 ? `${d}d` : `${d}d${h}h`;
 }
 
+function setDoneRecursive(card, done) {
+  card.done = done;
+  card.children.forEach(child => setDoneRecursive(child, done));
+}
+
 function sumTime(card) {
   const own = card.timeNeeded || 5;
   return card.children.reduce((total, child) => total + sumTime(child), own);
@@ -157,12 +167,14 @@ function sumTime(card) {
       const addBtn = depth < MAX_DEPTH
         ? `<button class="btn-add" data-id="${card.id}" aria-label="Add sub-card"><i class="ti ti-plus"></i></button>`
         : '';
+      const doneBtn = `<button class="btn-done ${card.done ? 'is-done' : ''}" data-id="${card.id}" aria-label="Mark done"><i class="ti ti-check"></i></button>`;
 
       cardEl.innerHTML = `
-        <div class="ct-card d${depth}">
+        <div class="ct-card d${depth} ${card.done ? 'done' : ''}">
           <div class="ct-card-header">
             <p class="ct-card-title">${card.title}</p>
             <div class="ct-actions">
+              ${doneBtn}
               <button class="btn-edit" data-id="${card.id}" aria-label="Edit"><i class="ti ti-pencil"></i></button>
               ${addBtn}
             </div>
@@ -188,6 +200,13 @@ function sumTime(card) {
           render();
         }, null, card);
       });
+
+      cardEl.querySelector('.btn-done').addEventListener('click', () => {
+        setDoneRecursive(card, !card.done);
+        saveData(cards_root);
+        render();
+      });
+
 
       const addBtnEl = cardEl.querySelector('.btn-add');
       if (addBtnEl) {
