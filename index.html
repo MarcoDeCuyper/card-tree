@@ -15,9 +15,10 @@
     display: flex;
     justify-content: center;
   }
-  .ct-wrap { max-width: 600px; width: 100%; }
+  .ct-wrap { max-width: 700px; width: 100%; }
   .ct-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
   .ct-toolbar h1 { font-size: 18px; font-weight: 500; margin: 0; color: #1a1a1a; }
+  .ct-toolbar-actions { display: flex; gap: 8px; }
   .ct-children { margin-left: 20px; padding-left: 14px; border-left: 1px solid #e5e5e3; margin-top: 8px; }
   .ct-card { background: #fff; border: 0.5px solid #e5e5e3; border-radius: 0 10px 10px 0; padding: 10px 12px; margin-bottom: 8px; }
   .ct-card.d0 { border-left: 2px solid #1D9E75; }
@@ -25,11 +26,9 @@
   .ct-card.d2 { border-left: 2px solid #7F77DD; }
   .ct-card.d3 { border-left: 2px solid #D85A30; }
   .ct-card.d4 { border-left: 2px solid #D4537E; }
-
   .ct-card.done { opacity: 0.5; }
-  .ct-card.done .ct-card-title { text-decoration: none; color: #1D9E75; }
+  .ct-card.done .ct-card-title { color: #1D9E75; }
   .btn-done.is-done { color: #1D9E75; }
-
   .ct-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
   .ct-card-title { font-size: 14px; font-weight: 500; color: #1a1a1a; margin: 0 0 6px; }
   .ct-card-meta { display: flex; gap: 12px; }
@@ -50,24 +49,62 @@
   .ct-add-root { font-size: 14px; font-weight: 500; padding: 8px 14px; border-radius: 8px; cursor: pointer; border: 1px solid #d4d4d2; background: #fff; display: flex; align-items: center; gap: 6px; }
   .ct-add-root:hover { background: #f5f5f4; }
   .ct-empty { font-size: 14px; color: #999; padding: 1rem 0; }
+
+  /* Timeline */
+  .tl-section { margin-top: 2rem; border-top: 1px solid #e5e5e3; padding-top: 1.5rem; }
+  .tl-section h2 { font-size: 16px; font-weight: 500; margin: 0 0 1.25rem; color: #1a1a1a; }
+  .tl-scroll { overflow-x: auto; }
+  .tl-inner { min-width: 500px; }
+  .tl-header-row { display: flex; margin-left: 150px; margin-bottom: 4px; }
+  .tl-day { flex: 1; font-size: 10px; color: #999; text-align: center; border-left: 1px solid #f0f0ee; padding: 2px 0; min-width: 28px; }
+  .tl-day.today { color: #1D9E75; font-weight: 600; }
+  .tl-row { display: flex; align-items: center; margin-bottom: 5px; }
+  .tl-label { width: 150px; font-size: 12px; color: #1a1a1a; padding-right: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; display: flex; align-items: center; gap: 6px; }
+  .tl-label.done { color: #999; }
+  .tl-track { flex: 1; height: 26px; position: relative; border-left: 1px solid #e5e5e3; }
+  .tl-bar { position: absolute; height: 18px; top: 4px; border-radius: 4px; display: flex; align-items: center; padding: 0 6px; font-size: 10px; color: #fff; white-space: nowrap; overflow: hidden; min-width: 4px; }
+  .tl-bar.d0 { background: #1D9E75; }
+  .tl-bar.d1 { background: #378ADD; }
+  .tl-bar.d2 { background: #7F77DD; }
+  .tl-bar.d3 { background: #D85A30; }
+  .tl-bar.d4 { background: #D4537E; }
+  .tl-bar.done { opacity: 0.35; }
+  .tl-today-line { position: absolute; top: 0; bottom: 0; width: 1px; background: #1D9E75; opacity: 0.6; pointer-events: none; z-index: 2; }
+  .tl-grid-line { position: absolute; top: 0; bottom: 0; width: 1px; background: #f0f0ee; pointer-events: none; }
+  .tl-toggle { font-size: 13px; padding: 7px 14px; border-radius: 8px; cursor: pointer; border: 1px solid #d4d4d2; background: #fff; display: flex; align-items: center; gap: 6px; }
+  .tl-toggle:hover { background: #f5f5f4; }
 </style>
 </head>
 <body>
 <div class="ct-wrap">
   <div class="ct-toolbar">
     <h1>My projects</h1>
-    <button class="ct-add-root" id="addRootBtn">
-      <i class="ti ti-plus" style="font-size:13px;"></i> Add card
-    </button>
+    <div class="ct-toolbar-actions">
+      <button class="tl-toggle" id="timelineToggle">
+        <i class="ti ti-timeline" style="font-size:13px;"></i> Show timeline
+      </button>
+      <button class="ct-add-root" id="addRootBtn">
+        <i class="ti ti-plus" style="font-size:13px;"></i> Add card
+      </button>
+    </div>
   </div>
   <div id="formRoot"></div>
   <div id="tree"></div>
+  <div id="timelineSection" class="tl-section" style="display:none;">
+    <h2>Timeline</h2>
+    <div class="tl-scroll"><div class="tl-inner" id="timelineInner"></div></div>
+  </div>
 </div>
 
 <script>
   const STORAGE_KEY = 'cardtree_data';
   const MAX_DEPTH = 4;
+  const DEPTH_COLORS = ['#1D9E75','#378ADD','#7F77DD','#D85A30','#D4537E'];
   let nextId = 1;
+  let timelineVisible = false;
+  let tlVisibility = {}; // tracks which top-level card IDs are visible on timeline
+
+
 
   function loadData() {
     try {
@@ -85,43 +122,171 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ cards, nextId }));
   }
 
-  function parseTime(input) {
-  if (!input || !input.trim()) return 5;
-  const s = input.trim().toLowerCase();
-  const num = parseFloat(s);
-  if (isNaN(num)) return 5;
-  if (s.includes('d')) return Math.round(num * 480);
-  if (s.includes('h')) return Math.round(num * 60);
-  return Math.round(num);
-}
-
-function formatTime(minutes) {
-  if (!minutes) return '5m';
-  if (minutes < 60) return `${minutes}m`;
-  if (minutes < 480) {
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    return m === 0 ? `${h}h` : `${h}h${m}m`;
+  function makeCard(title, dueDate, timeNeeded) {
+    return { id: nextId++, title, dueDate, timeNeeded: parseTime(timeNeeded), children: [] };
   }
-  const d = Math.floor(minutes / 480);
-  const remaining = minutes % 480;
-  const h = Math.floor(remaining / 60);
-  return h === 0 ? `${d}d` : `${d}d${h}h`;
-}
 
-function setDoneRecursive(card, done) {
-  card.done = done;
-  card.children.forEach(child => setDoneRecursive(child, done));
-}
+  function parseTime(input) {
+    if (!input || !String(input).trim()) return 5;
+    const s = String(input).trim().toLowerCase();
+    const num = parseFloat(s);
+    if (isNaN(num)) return 5;
+    if (s.includes('d')) return Math.round(num * 480);
+    if (s.includes('h')) return Math.round(num * 60);
+    return Math.round(num);
+  }
 
-function sumTime(card) {
-  const own = card.timeNeeded || 5;
-  return card.children.reduce((total, child) => total + sumTime(child), own);
-}
+  function formatTime(minutes) {
+    if (!minutes) return '5m';
+    if (minutes < 60) return `${minutes}m`;
+    if (minutes < 480) {
+      const h = Math.floor(minutes / 60);
+      const m = minutes % 60;
+      return m === 0 ? `${h}h` : `${h}h${m}m`;
+    }
+    const d = Math.floor(minutes / 480);
+    const remaining = minutes % 480;
+    const h = Math.floor(remaining / 60);
+    return h === 0 ? `${d}d` : `${d}d${h}h`;
+  }
 
- function makeCard(title, dueDate, timeNeeded) {
-  return { id: nextId++, title, dueDate, timeNeeded: parseTime(timeNeeded), children: [] };
-}
+  function sumTime(card) {
+    const own = card.timeNeeded || 5;
+    return card.children.reduce((total, child) => total + sumTime(child), own);
+  }
+
+  function setDoneRecursive(card, done) {
+    card.done = done;
+    card.children.forEach(child => setDoneRecursive(child, done));
+  }
+
+  // --- Timeline helpers ---
+
+  function minutesToDays(minutes) {
+    return Math.max(1, Math.ceil(minutes / 480));
+  }
+
+  function addDays(date, days) {
+    const d = new Date(date);
+    d.setDate(d.getDate() + days);
+    return d;
+  }
+
+  function startOfDay(date) {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  function daysBetween(a, b) {
+    return Math.round((startOfDay(b) - startOfDay(a)) / 86400000);
+  }
+
+  function flattenCards(cards, depth = 0) {
+    let result = [];
+    cards.forEach(card => {
+      result.push({ card, depth });
+      result = result.concat(flattenCards(card.children, depth + 1));
+    });
+    return result;
+  }
+
+  function renderTimeline(cards) {
+    const today = startOfDay(new Date());
+    const visibleCards = cards.filter(card => tlVisibility[card.id] !== false);
+    const flat = flattenCards(visibleCards);
+
+    // Calculate start and end dates for each card
+    const rows = flat.map(({ card, depth }) => {
+      const due = card.dueDate ? startOfDay(new Date(card.dueDate + 'T00:00:00')) : today;
+      const durationDays = minutesToDays(sumTime(card));
+      const start = addDays(due, -durationDays + 1);
+      return { card, depth, start, due };
+    });
+
+    if (rows.length === 0) {
+      document.getElementById('timelineInner').innerHTML = '<p style="font-size:14px;color:#999;">No cards yet.</p>';
+      return;
+    }
+
+    // Date range: earliest start to latest due, padded by 1 day each side
+    const minDate = addDays(rows.reduce((m, r) => r.start < m ? r.start : m, rows[0].start), -1);
+    const maxDate = addDays(rows.reduce((m, r) => r.due > m ? r.due : m, rows[0].due), 2);
+    const totalDays = daysBetween(minDate, maxDate);
+
+    // Build day headers
+    let dayHeaders = '';
+    for (let i = 0; i < totalDays; i++) {
+      const d = addDays(minDate, i);
+      const isToday = daysBetween(today, d) === 0;
+      const label = d.getDate() === 1 || i === 0
+        ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+        : d.getDate();
+      dayHeaders += `<div class="tl-day ${isToday ? 'today' : ''}">${label}</div>`;
+    }
+
+    // Today line position
+    const todayOffset = daysBetween(minDate, today);
+    const todayPct = (todayOffset / totalDays) * 100;
+
+    // Build rows
+    let rowsHTML = '';
+    rows.forEach(({ card, depth, start, due }) => {
+      const startOffset = daysBetween(minDate, start);
+      const endOffset = daysBetween(minDate, due) + 1;
+      const leftPct = (startOffset / totalDays) * 100;
+      const widthPct = ((endOffset - startOffset) / totalDays) * 100;
+
+      // Grid lines
+      let gridLines = '';
+      for (let i = 0; i < totalDays; i++) {
+        const pct = (i / totalDays) * 100;
+        gridLines += `<div class="tl-grid-line" style="left:${pct}%"></div>`;
+      }
+
+      rowsHTML += `
+        <div class="tl-row">
+          <div class="tl-label ${card.done ? 'done' : ''}">
+            <span style="display:inline-block;width:${depth * 8}px;flex-shrink:0;"></span>
+            ${card.title}
+          </div>
+          <div class="tl-track">
+            ${gridLines}
+            <div class="tl-today-line" style="left:${todayPct}%"></div>
+            <div class="tl-bar d${depth} ${card.done ? 'done' : ''}"
+              style="left:${leftPct}%;width:${widthPct}%;"
+              title="${card.title}">
+              ${widthPct > 8 ? card.title : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    });
+
+    // Build top-level checkboxes
+      const checkboxes = cards.map(card => `
+        <label style="display:inline-flex; align-items:center; gap:5px; font-size:13px; color:#555; cursor:pointer; margin-right:12px;">
+          <input type="checkbox" class="tl-visibility-cb" data-id="${card.id}" ${tlVisibility[card.id] !== false ? 'checked' : ''} />
+          ${card.title}
+        </label>
+      `).join('');
+
+      document.getElementById('timelineInner').innerHTML = `
+        <div style="margin-bottom:1rem;">${checkboxes}</div>
+        <div class="tl-header-row">${dayHeaders}</div>
+        <div style="position:relative;">${rowsHTML}</div>
+      `;
+
+      // Wire up checkboxes
+      document.querySelectorAll('.tl-visibility-cb').forEach(cb => {
+        cb.addEventListener('change', () => {
+          tlVisibility[parseInt(cb.dataset.id)] = cb.checked;
+          renderTimeline(cards_root);
+        });
+      });
+  }
+
+  // --- Form ---
 
   function renderForm(containerId, onSave, onCancel, defaults = {}) {
     const container = document.getElementById(containerId);
@@ -140,10 +305,10 @@ function sumTime(card) {
     `;
     document.getElementById('f-title').focus();
     container.querySelectorAll('input').forEach(input => {
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') document.getElementById('f-save').click();
-  });
-});
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') document.getElementById('f-save').click();
+      });
+    });
     document.getElementById('f-save').addEventListener('click', () => {
       const title = document.getElementById('f-title').value.trim();
       if (!title) return;
@@ -155,6 +320,8 @@ function sumTime(card) {
       onCancel && onCancel();
     });
   }
+
+  // --- Tree rendering ---
 
   function renderTree(cards, container, depth) {
     cards.forEach(card => {
@@ -191,6 +358,12 @@ function sumTime(card) {
         renderTree(card.children, document.getElementById(childrenId), depth + 1);
       }
 
+      cardEl.querySelector('.btn-done').addEventListener('click', () => {
+        setDoneRecursive(card, !card.done);
+        saveData(cards_root);
+        render();
+      });
+
       cardEl.querySelector('.btn-edit').addEventListener('click', () => {
         renderForm(formId, (title, dueDate, timeNeeded) => {
           card.title = title;
@@ -200,13 +373,6 @@ function sumTime(card) {
           render();
         }, null, card);
       });
-
-      cardEl.querySelector('.btn-done').addEventListener('click', () => {
-        setDoneRecursive(card, !card.done);
-        saveData(cards_root);
-        render();
-      });
-
 
       const addBtnEl = cardEl.querySelector('.btn-add');
       if (addBtnEl) {
@@ -239,10 +405,30 @@ function sumTime(card) {
     tree.innerHTML = '';
     if (cards_root.length === 0) {
       tree.innerHTML = '<p class="ct-empty">No cards yet — add one above to get started.</p>';
-      return;
+    } else {
+      renderTree(cards_root, tree, 0);
     }
-    renderTree(cards_root, tree, 0);
+    if (timelineVisible) renderTimeline(cards_root);
   }
+
+  // Timeline toggle
+  document.getElementById('timelineToggle').addEventListener('click', () => {
+    timelineVisible = !timelineVisible;
+    const section = document.getElementById('timelineSection');
+    const btn = document.getElementById('timelineToggle');
+    if (timelineVisible) {
+      section.style.display = 'block';
+      btn.innerHTML = '<i class="ti ti-timeline" style="font-size:13px;"></i> Hide timeline';
+      // Initialize visibility for any top-level cards not yet tracked
+      cards_root.forEach(card => {
+        if (!(card.id in tlVisibility)) tlVisibility[card.id] = true;
+      });
+      renderTimeline(cards_root);
+    } else {
+      section.style.display = 'none';
+      btn.innerHTML = '<i class="ti ti-timeline" style="font-size:13px;"></i> Show timeline';
+    }
+  });
 
   document.getElementById('addRootBtn').addEventListener('click', () => {
     renderForm('formRoot', (title, dueDate, timeNeeded) => {
