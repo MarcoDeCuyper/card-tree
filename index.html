@@ -182,6 +182,27 @@
     return Math.round((startOfDay(b) - startOfDay(a)) / 86400000);
   }
 
+function latestDueDate(card) {
+  const dates = [];
+  if (card.dueDate) dates.push(new Date(card.dueDate + 'T00:00:00'));
+  card.children.forEach(child => {
+    const d = latestDueDate(child);
+    if (d) dates.push(d);
+  });
+  return dates.length ? new Date(Math.max(...dates)) : null;
+}
+
+function earliestStartDate(card, today) {
+  const due = latestDueDate(card) || today;
+  const durationDays = minutesToDays(sumTime(card));
+  const ownStart = addDays(due, -durationDays + 1);
+  
+  const childStarts = card.children.map(child => earliestStartDate(child, today));
+  const allStarts = [ownStart, ...childStarts];
+  return new Date(Math.min(...allStarts));
+}
+
+
   function flattenCards(cards, depth = 0) {
     let result = [];
     cards.forEach(card => {
@@ -198,11 +219,10 @@
 
     // Calculate start and end dates for each card
     const rows = flat.map(({ card, depth }) => {
-      const due = card.dueDate ? startOfDay(new Date(card.dueDate + 'T00:00:00')) : today;
-      const durationDays = minutesToDays(sumTime(card));
-      const start = addDays(due, -durationDays + 1);
-      return { card, depth, start, due };
-    });
+    const due = startOfDay(latestDueDate(card) || today);
+    const start = startOfDay(earliestStartDate(card, today));
+    return { card, depth, start, due };
+  });
 
     if (rows.length === 0) {
       document.getElementById('timelineInner').innerHTML = '<p style="font-size:14px;color:#999;">No cards yet.</p>';
