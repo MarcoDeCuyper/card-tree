@@ -307,6 +307,7 @@
     container.querySelectorAll('input').forEach(input => {
       input.addEventListener('keydown', e => {
         if (e.key === 'Enter') document.getElementById('f-save').click();
+        if (e.key === 'Escape') document.getElementById('f-cancel').click();
       });
     });
     document.getElementById('f-save').addEventListener('click', () => {
@@ -387,13 +388,24 @@
             subFormEl.id = subFormId;
             childContainer.prepend(subFormEl);
           }
-          renderForm(subFormId, (title, dueDate, timeNeeded) => {
-            card.children.push(makeCard(title, dueDate, timeNeeded));
-            saveData(cards_root);
-            render();
-          }, () => {
-            if (!card.children.length) childContainer.style.display = 'none';
-          });
+                function openSubForm() {
+        renderForm(subFormId, (title, dueDate, timeNeeded) => {
+          card.children.push(makeCard(title, dueDate, timeNeeded));
+          saveData(cards_root);
+          render();
+          // Re-find the subform container after render and reopen
+          const newSubFormEl = document.getElementById(subFormId) || (() => {
+            const el = document.createElement('div');
+            el.id = subFormId;
+            document.getElementById(childrenId).prepend(el);
+            return el;
+          })();
+          openSubForm();
+        }, () => {
+          if (!card.children.length) document.getElementById(childrenId).style.display = 'none';
+        });
+      }
+      openSubForm();
         });
       }
     });
@@ -431,13 +443,16 @@
     }
   });
 
-  document.getElementById('addRootBtn').addEventListener('click', () => {
+  function openRootForm() {
     renderForm('formRoot', (title, dueDate, timeNeeded) => {
       cards_root.push(makeCard(title, dueDate, timeNeeded));
       saveData(cards_root);
       render();
+      openRootForm();
     }, null);
-  });
+  }
+
+document.getElementById('addRootBtn').addEventListener('click', openRootForm);
 
   render();
 </script>
