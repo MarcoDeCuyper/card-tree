@@ -341,9 +341,8 @@
           <div class="ct-card-header">
             <p class="ct-card-title">${card.title}</p>
             <div class="ct-actions">
-              ${doneBtn}
-              <button class="btn-edit" data-id="${card.id}" aria-label="Edit"><i class="ti ti-pencil"></i></button>
-              ${addBtn}
+            ${doneBtn}
+            ${addBtn}
             </div>
           </div>
           <div class="ct-card-meta">${metaDate}${metaTime}</div>
@@ -364,7 +363,9 @@
         render();
       });
 
-      cardEl.querySelector('.btn-edit').addEventListener('click', () => {
+      cardEl.querySelector('.ct-card').addEventListener('click', (e) => {
+        // Don't trigger edit if clicking the done or add buttons
+        if (e.target.closest('.ct-actions')) return;
         renderForm(formId, (title, dueDate, timeNeeded) => {
           card.title = title;
           card.dueDate = dueDate;
