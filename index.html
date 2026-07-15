@@ -616,6 +616,23 @@
         )
         .subscribe();
 
+        //logs
+          supabase
+          .channel('cards-changes')
+          .on('postgres_changes',
+            { event: '*', schema: 'public', table: 'cards' },
+            async (payload) => {
+              console.log('Realtime event received:', payload);
+              const remote = await dbLoad();
+              if (remote !== null) {
+                cards_root = remote;
+                render();
+              }
+            }
+          )
+          .subscribe((status) => {
+            console.log('Realtime subscription status:', status);
+          });
 
     // Register service worker for PWA
   if ('serviceWorker' in navigator) {
