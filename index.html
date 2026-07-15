@@ -93,6 +93,9 @@
   .tl-toggle { font-size: 13px; padding: 7px 14px; border-radius: 8px; cursor: pointer; border: 1px solid #d4d4d2; background: #fff; display: flex; align-items: center; gap: 6px; }
   .tl-toggle:hover { background: #f5f5f4; }
 </style>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#1D9E75" />
+  <link rel="apple-touch-icon" href="icon.svg" />
 </head>
 <body>
 <div class="ct-wrap">
@@ -593,6 +596,14 @@
   }
 
   init();
+
+    // Register service worker for PWA
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/card-tree/sw.js');
+    });
+  }
+
 </script>
 </body>
 </html>
