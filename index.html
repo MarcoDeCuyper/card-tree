@@ -18,9 +18,9 @@
   .ct-wrap { max-width: 700px; width: 100%; }
   .ct-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
   .ct-toolbar h1 { font-size: 18px; font-weight: 500; margin: 0; color: #1a1a1a; }
-  .ct-toolbar-actions { display: flex; gap: 8px; }
+  .ct-toolbar-actions { display: flex; gap: 8px; align-items: center; }
   .ct-children { margin-left: 20px; padding-left: 14px; border-left: 1px solid #e5e5e3; margin-top: 8px; }
-  .ct-card { background: #fff; border: 0.5px solid #e5e5e3; border-radius: 0 10px 10px 0; padding: 10px 12px; margin-bottom: 8px; }
+  .ct-card { background: #fff; border: 0.5px solid #e5e5e3; border-radius: 0 10px 10px 0; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; }
   .ct-card.d0 { border-left: 2px solid #1D9E75; }
   .ct-card.d1 { border-left: 2px solid #378ADD; }
   .ct-card.d2 { border-left: 2px solid #7F77DD; }
@@ -49,8 +49,9 @@
   .ct-add-root { font-size: 14px; font-weight: 500; padding: 8px 14px; border-radius: 8px; cursor: pointer; border: 1px solid #d4d4d2; background: #fff; display: flex; align-items: center; gap: 6px; }
   .ct-add-root:hover { background: #f5f5f4; }
   .ct-empty { font-size: 14px; color: #999; padding: 1rem 0; }
-
-  /* Timeline */
+  .ct-sync { font-size: 12px; color: #999; }
+  .ct-sync.syncing { color: #378ADD; }
+  .ct-sync.error { color: #c0392b; }
   .tl-section { margin-top: 2rem; border-top: 1px solid #e5e5e3; padding-top: 1.5rem; }
   .tl-section h2 { font-size: 16px; font-weight: 500; margin: 0 0 1.25rem; color: #1a1a1a; }
   .tl-scroll { overflow-x: auto; }
@@ -80,6 +81,7 @@
   <div class="ct-toolbar">
     <h1>My projects</h1>
     <div class="ct-toolbar-actions">
+      <span class="ct-sync" id="syncStatus"></span>
       <button class="tl-toggle" id="timelineToggle">
         <i class="ti ti-timeline" style="font-size:13px;"></i> Show timeline
       </button>
@@ -97,29 +99,71 @@
 </div>
 
 <script>
+  const SUPABASE_URL = 'https://jflfloxvgecisofuzymg.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_HDPjd3EWajuYPkkI0tywxQ_l4b_D8Fg';
+  const USER_ID = 'default';
+
   const STORAGE_KEY = 'cardtree_data';
   const MAX_DEPTH = 4;
-  const DEPTH_COLORS = ['#1D9E75','#378ADD','#7F77DD','#D85A30','#D4537E'];
   let nextId = 1;
   let timelineVisible = false;
-  let tlVisibility = {}; // tracks which top-level card IDs are visible on timeline
+  let tlVisibility = {};
 
+  // ── SUPABASE ──
 
-
-  function loadData() {
+  async function dbLoad() {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/cards?user_id=eq.${USER_ID}&limit=1`, {
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+      });
+      const rows = await res.json();
+      if (rows && rows.length > 0) {
+        const parsed = rows[0].data;
         nextId = parsed.nextId || 1;
         return parsed.cards || [];
       }
+    } catch(e) { console.error('Supabase load error:', e); }
+    return null;
+  }
+
+  async function dbSave(cards) {
+    setSyncStatus('syncing');
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/cards`, {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates'
+        },
+        body: JSON.stringify({ user_id: USER_ID, data: { cards, nextId }, updated_at: new Date().toISOString() })
+      });
+      if (res.ok) {
+        setSyncStatus('saved');
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ cards, nextId }));
+      } else { setSyncStatus('error'); }
+    } catch(e) { setSyncStatus('error'); console.error('Supabase save error:', e); }
+  }
+
+  function setSyncStatus(state) {
+    const el = document.getElementById('syncStatus');
+    if (state === 'syncing') { el.textContent = 'Saving…'; el.className = 'ct-sync syncing'; }
+    else if (state === 'saved') { el.textContent = 'Saved'; el.className = 'ct-sync'; setTimeout(() => el.textContent = '', 2000); }
+    else if (state === 'error') { el.textContent = 'Sync error'; el.className = 'ct-sync error'; }
+  }
+
+  function loadLocalData() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) { const p = JSON.parse(raw); nextId = p.nextId || 1; return p.cards || []; }
     } catch(e) {}
     return [];
   }
 
   function saveData(cards) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ cards, nextId }));
+    dbSave(cards);
   }
 
   function makeCard(title, dueDate, timeNeeded) {
@@ -145,8 +189,7 @@
       return m === 0 ? `${h}h` : `${h}h${m}m`;
     }
     const d = Math.floor(minutes / 480);
-    const remaining = minutes % 480;
-    const h = Math.floor(remaining / 60);
+    const h = Math.floor((minutes % 480) / 60);
     return h === 0 ? `${d}d` : `${d}d${h}h`;
   }
 
@@ -160,48 +203,26 @@
     card.children.forEach(child => setDoneRecursive(child, done));
   }
 
-  // --- Timeline helpers ---
+  // ── TIMELINE ──
 
-  function minutesToDays(minutes) {
-    return Math.max(1, Math.ceil(minutes / 480));
+  function minutesToDays(m) { return Math.max(1, Math.ceil(m / 480)); }
+  function addDays(date, days) { const d = new Date(date); d.setDate(d.getDate() + days); return d; }
+  function startOfDay(date) { const d = new Date(date); d.setHours(0,0,0,0); return d; }
+  function daysBetween(a, b) { return Math.round((startOfDay(b) - startOfDay(a)) / 86400000); }
+
+  function latestDueDate(card) {
+    const dates = [];
+    if (card.dueDate) dates.push(new Date(card.dueDate + 'T00:00:00'));
+    card.children.forEach(child => { const d = latestDueDate(child); if (d) dates.push(d); });
+    return dates.length ? new Date(Math.max(...dates)) : null;
   }
 
-  function addDays(date, days) {
-    const d = new Date(date);
-    d.setDate(d.getDate() + days);
-    return d;
+  function earliestStartDate(card, today) {
+    const due = latestDueDate(card) || today;
+    const ownStart = addDays(due, -minutesToDays(sumTime(card)) + 1);
+    const childStarts = card.children.map(child => earliestStartDate(child, today));
+    return new Date(Math.min(ownStart, ...childStarts));
   }
-
-  function startOfDay(date) {
-    const d = new Date(date);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }
-
-  function daysBetween(a, b) {
-    return Math.round((startOfDay(b) - startOfDay(a)) / 86400000);
-  }
-
-function latestDueDate(card) {
-  const dates = [];
-  if (card.dueDate) dates.push(new Date(card.dueDate + 'T00:00:00'));
-  card.children.forEach(child => {
-    const d = latestDueDate(child);
-    if (d) dates.push(d);
-  });
-  return dates.length ? new Date(Math.max(...dates)) : null;
-}
-
-function earliestStartDate(card, today) {
-  const due = latestDueDate(card) || today;
-  const durationDays = minutesToDays(sumTime(card));
-  const ownStart = addDays(due, -durationDays + 1);
-  
-  const childStarts = card.children.map(child => earliestStartDate(child, today));
-  const allStarts = [ownStart, ...childStarts];
-  return new Date(Math.min(...allStarts));
-}
-
 
   function flattenCards(cards, depth = 0) {
     let result = [];
@@ -216,222 +237,212 @@ function earliestStartDate(card, today) {
     const today = startOfDay(new Date());
     const visibleCards = cards.filter(card => tlVisibility[card.id] !== false);
     const flat = flattenCards(visibleCards);
-
-    // Calculate start and end dates for each card
-    const rows = flat.map(({ card, depth }) => {
-    const due = startOfDay(latestDueDate(card) || today);
-    const start = startOfDay(earliestStartDate(card, today));
-    return { card, depth, start, due };
-  });
+    const rows = flat.map(({ card, depth }) => ({
+      card, depth,
+      due: startOfDay(latestDueDate(card) || today),
+      start: startOfDay(earliestStartDate(card, today))
+    }));
 
     if (rows.length === 0) {
-      document.getElementById('timelineInner').innerHTML = '<p style="font-size:14px;color:#999;">No cards yet.</p>';
+      document.getElementById('timelineInner').innerHTML = '<p style="font-size:14px;color:#999;">No cards to show.</p>';
       return;
     }
 
-    // Date range: earliest start to latest due, padded by 1 day each side
     const minDate = addDays(rows.reduce((m, r) => r.start < m ? r.start : m, rows[0].start), -1);
     const maxDate = addDays(rows.reduce((m, r) => r.due > m ? r.due : m, rows[0].due), 2);
     const totalDays = daysBetween(minDate, maxDate);
+    const todayPct = (daysBetween(minDate, today) / totalDays) * 100;
 
-    // Build day headers
     let dayHeaders = '';
     for (let i = 0; i < totalDays; i++) {
       const d = addDays(minDate, i);
       const isToday = daysBetween(today, d) === 0;
       const label = d.getDate() === 1 || i === 0
-        ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-        : d.getDate();
+        ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : d.getDate();
       dayHeaders += `<div class="tl-day ${isToday ? 'today' : ''}">${label}</div>`;
     }
 
-    // Today line position
-    const todayOffset = daysBetween(minDate, today);
-    const todayPct = (todayOffset / totalDays) * 100;
-
-    // Build rows
     let rowsHTML = '';
     rows.forEach(({ card, depth, start, due }) => {
-      const startOffset = daysBetween(minDate, start);
-      const endOffset = daysBetween(minDate, due) + 1;
-      const leftPct = (startOffset / totalDays) * 100;
-      const widthPct = ((endOffset - startOffset) / totalDays) * 100;
-
-      // Grid lines
+      const leftPct = (daysBetween(minDate, start) / totalDays) * 100;
+      const widthPct = ((daysBetween(minDate, due) + 1 - daysBetween(minDate, start)) / totalDays) * 100;
       let gridLines = '';
-      for (let i = 0; i < totalDays; i++) {
-        const pct = (i / totalDays) * 100;
-        gridLines += `<div class="tl-grid-line" style="left:${pct}%"></div>`;
-      }
-
+      for (let i = 0; i < totalDays; i++) gridLines += `<div class="tl-grid-line" style="left:${(i/totalDays)*100}%"></div>`;
       rowsHTML += `
         <div class="tl-row">
           <div class="tl-label ${card.done ? 'done' : ''}">
-            <span style="display:inline-block;width:${depth * 8}px;flex-shrink:0;"></span>
-            ${card.title}
+            <span style="display:inline-block;width:${depth*8}px;flex-shrink:0;"></span>${card.title}
           </div>
           <div class="tl-track">
             ${gridLines}
             <div class="tl-today-line" style="left:${todayPct}%"></div>
-            <div class="tl-bar d${depth} ${card.done ? 'done' : ''}"
-              style="left:${leftPct}%;width:${widthPct}%;"
-              title="${card.title}">
+            <div class="tl-bar d${depth} ${card.done ? 'done' : ''}" style="left:${leftPct}%;width:${widthPct}%;" title="${card.title}">
               ${widthPct > 8 ? card.title : ''}
             </div>
           </div>
-        </div>
-      `;
+        </div>`;
     });
 
-    // Build top-level checkboxes
-      const checkboxes = cards.map(card => `
-        <label style="display:inline-flex; align-items:center; gap:5px; font-size:13px; color:#555; cursor:pointer; margin-right:12px;">
-          <input type="checkbox" class="tl-visibility-cb" data-id="${card.id}" ${tlVisibility[card.id] !== false ? 'checked' : ''} />
-          ${card.title}
-        </label>
-      `).join('');
+    const checkboxes = cards.map(card => `
+      <label style="display:inline-flex;align-items:center;gap:5px;font-size:13px;color:#555;cursor:pointer;margin-right:12px;">
+        <input type="checkbox" class="tl-visibility-cb" data-id="${card.id}" ${tlVisibility[card.id] !== false ? 'checked' : ''} />${card.title}
+      </label>`).join('');
 
-      document.getElementById('timelineInner').innerHTML = `
-        <div style="margin-bottom:1rem;">${checkboxes}</div>
-        <div class="tl-header-row">${dayHeaders}</div>
-        <div style="position:relative;">${rowsHTML}</div>
-      `;
+    document.getElementById('timelineInner').innerHTML = `
+      <div style="margin-bottom:1rem;">${checkboxes}</div>
+      <div class="tl-header-row">${dayHeaders}</div>
+      <div style="position:relative;">${rowsHTML}</div>`;
 
-      // Wire up checkboxes
-      document.querySelectorAll('.tl-visibility-cb').forEach(cb => {
-        cb.addEventListener('change', () => {
-          tlVisibility[parseInt(cb.dataset.id)] = cb.checked;
-          renderTimeline(cards_root);
-        });
+    document.querySelectorAll('.tl-visibility-cb').forEach(cb => {
+      cb.addEventListener('change', () => {
+        tlVisibility[parseInt(cb.dataset.id)] = cb.checked;
+        renderTimeline(cards_root);
       });
+    });
   }
 
-  // --- Form ---
+  // ── FORM ──
 
-  function renderForm(containerId, onSave, onCancel, defaults = {}) {
-    const container = document.getElementById(containerId);
+  function renderForm(container, onSave, onCancel, defaults = {}) {
+    if (typeof container === 'string') container = document.getElementById(container);
+    if (!container) return;
     container.innerHTML = `
       <div class="ct-form">
-        <input id="f-title" type="text" placeholder="Card title" value="${defaults.title || ''}" />
+        <input class="f-title" type="text" placeholder="Card title" value="${defaults.title || ''}" />
         <div class="ct-form-row">
-          <input id="f-due" type="date" value="${defaults.dueDate || ''}" />
-          <input id="f-time" type="text" placeholder="Time needed (e.g. 2h)" value="${defaults.timeNeeded ? formatTime(defaults.timeNeeded) : ''}" />
+          <input class="f-due" type="date" value="${defaults.dueDate || ''}" />
+          <input class="f-time" type="text" placeholder="Time needed (e.g. 2h)" value="${defaults.timeNeeded ? formatTime(defaults.timeNeeded) : ''}" />
         </div>
         <div class="ct-form-actions">
-          <button id="f-cancel">Cancel</button>
-          <button id="f-save" class="primary">Save</button>
+          <button class="f-cancel">Cancel</button>
+          <button class="f-save primary">Save</button>
         </div>
-      </div>
-    `;
-    document.getElementById('f-title').focus();
+      </div>`;
+    const titleEl = container.querySelector('.f-title');
+    const saveEl = container.querySelector('.f-save');
+    const cancelEl = container.querySelector('.f-cancel');
+    console.log('renderForm: focusing title, container connected:', container.isConnected, container);
+    titleEl.focus();
     container.querySelectorAll('input').forEach(input => {
       input.addEventListener('keydown', e => {
-        if (e.key === 'Enter') document.getElementById('f-save').click();
-        if (e.key === 'Escape') document.getElementById('f-cancel').click();
+        if (e.key === 'Enter') saveEl.click();
+        if (e.key === 'Escape') cancelEl.click();
       });
     });
-    document.getElementById('f-save').addEventListener('click', () => {
-      const title = document.getElementById('f-title').value.trim();
+    saveEl.addEventListener('click', () => {
+      const title = container.querySelector('.f-title').value.trim();
       if (!title) return;
-      onSave(title, document.getElementById('f-due').value, document.getElementById('f-time').value.trim());
+      onSave(
+        title,
+        container.querySelector('.f-due').value,
+        container.querySelector('.f-time').value.trim()
+      );
       container.innerHTML = '';
     });
-    document.getElementById('f-cancel').addEventListener('click', () => {
+    cancelEl.addEventListener('click', () => {
       container.innerHTML = '';
       onCancel && onCancel();
     });
   }
 
-  // --- Tree rendering ---
+  // ── TREE ──
+  // Key insight: when adding a subcard, we DON'T call render() on the whole tree.
+  // Instead we append just the new card's DOM directly, keeping all existing
+  // element references intact. render() is only called for edits and done toggles
+  // since those change existing card appearance.
 
-  function renderTree(cards, container, depth) {
-    cards.forEach(card => {
-      const cardEl = document.createElement('div');
-      const formId = `form-${card.id}`;
-      const childrenId = `children-${card.id}`;
-      const metaDate = card.dueDate ? `<span><i class="ti ti-calendar"></i> ${card.dueDate}</span>` : '';
-      const total = sumTime(card);
-      const metaTime = `<span><i class="ti ti-clock"></i> ${formatTime(total)}</span>`;
-      const addBtn = depth < MAX_DEPTH
-        ? `<button class="btn-add" data-id="${card.id}" aria-label="Add sub-card"><i class="ti ti-plus"></i></button>`
-        : '';
-      const doneBtn = `<button class="btn-done ${card.done ? 'is-done' : ''}" data-id="${card.id}" aria-label="Mark done"><i class="ti ti-check"></i></button>`;
+  function makeCardEl(card, childrenDiv, depth) {
+    const cardEl = document.createElement('div');
+    const formDiv = document.createElement('div');
 
-      cardEl.innerHTML = `
-        <div class="ct-card d${depth} ${card.done ? 'done' : ''}">
-          <div class="ct-card-header">
-            <p class="ct-card-title">${card.title}</p>
-            <div class="ct-actions">
-            ${doneBtn}
-            ${addBtn}
-            </div>
-          </div>
-          <div class="ct-card-meta">${metaDate}${metaTime}</div>
+    const metaDate = card.dueDate ? `<span><i class="ti ti-calendar"></i> ${card.dueDate}</span>` : '';
+    const metaTime = `<span class="time-display"><i class="ti ti-clock"></i> ${formatTime(sumTime(card))}</span>`;
+    const addBtn = depth < MAX_DEPTH
+      ? `<button class="btn-add" aria-label="Add sub-card"><i class="ti ti-plus"></i></button>` : '';
+    const doneBtn = `<button class="btn-done ${card.done ? 'is-done' : ''}" aria-label="Mark done"><i class="ti ti-check"></i></button>`;
+
+    cardEl.innerHTML = `
+      <div class="ct-card d${depth} ${card.done ? 'done' : ''}">
+        <div class="ct-card-header">
+          <p class="ct-card-title">${card.title}</p>
+          <div class="ct-actions">${doneBtn}${addBtn}</div>
         </div>
-        <div id="${formId}"></div>
-        <div id="${childrenId}" class="ct-children" style="display:${card.children.length ? 'block' : 'none'}"></div>
-      `;
+        <div class="ct-card-meta">${metaDate}${metaTime}</div>
+      </div>`;
 
-      container.appendChild(cardEl);
-
-      if (card.children.length) {
-        renderTree(card.children, document.getElementById(childrenId), depth + 1);
-      }
-
-      cardEl.querySelector('.btn-done').addEventListener('click', () => {
-        setDoneRecursive(card, !card.done);
-        saveData(cards_root);
-        render();
-      });
-
-      cardEl.querySelector('.ct-card').addEventListener('click', (e) => {
-        // Don't trigger edit if clicking the done or add buttons
-        if (e.target.closest('.ct-actions')) return;
-        renderForm(formId, (title, dueDate, timeNeeded) => {
-          card.title = title;
-          card.dueDate = dueDate;
-          card.timeNeeded = parseTime(timeNeeded);
-          saveData(cards_root);
-          render();
-        }, null, card);
-      });
-
-      const addBtnEl = cardEl.querySelector('.btn-add');
-      if (addBtnEl) {
-        addBtnEl.addEventListener('click', () => {
-          const childContainer = document.getElementById(childrenId);
-          childContainer.style.display = 'block';
-          const subFormId = `subform-${card.id}`;
-          let subFormEl = document.getElementById(subFormId);
-          if (!subFormEl) {
-            subFormEl = document.createElement('div');
-            subFormEl.id = subFormId;
-            childContainer.prepend(subFormEl);
-          }
-                function openSubForm() {
-        renderForm(subFormId, (title, dueDate, timeNeeded) => {
-          card.children.push(makeCard(title, dueDate, timeNeeded));
-          saveData(cards_root);
-          render();
-          // Re-find the subform container after render and reopen
-          const newSubFormEl = document.getElementById(subFormId) || (() => {
-            const el = document.createElement('div');
-            el.id = subFormId;
-            document.getElementById(childrenId).prepend(el);
-            return el;
-          })();
-          openSubForm();
-        }, () => {
-          if (!card.children.length) document.getElementById(childrenId).style.display = 'none';
-        });
-      }
-      openSubForm();
-        });
-      }
-    });
+    // Insert: cardEl, then formDiv, then childrenDiv (passed in from parent)
+    return { cardEl, formDiv };
   }
 
-  let cards_root = loadData();
+  function appendCardToContainer(card, container, depth) {
+    const childrenDiv = document.createElement('div');
+    childrenDiv.className = 'ct-children';
+    childrenDiv.style.display = card.children.length ? 'block' : 'none';
+
+    const { cardEl, formDiv } = makeCardEl(card, childrenDiv, depth);
+
+    container.appendChild(cardEl);
+    container.appendChild(formDiv);
+    container.appendChild(childrenDiv);
+
+    // Recurse for existing children
+    card.children.forEach(child => appendCardToContainer(child, childrenDiv, depth + 1));
+
+    // Done button
+    cardEl.querySelector('.btn-done').addEventListener('click', () => {
+      setDoneRecursive(card, !card.done);
+      saveData(cards_root);
+      render();
+    });
+
+    // Click card to edit
+    cardEl.querySelector('.ct-card').addEventListener('click', (e) => {
+      if (e.target.closest('.ct-actions')) return;
+      renderForm(formDiv, (title, dueDate, timeNeeded) => {
+        card.title = title;
+        card.dueDate = dueDate;
+        card.timeNeeded = parseTime(timeNeeded);
+        saveData(cards_root);
+        render();
+      }, null, card);
+    });
+
+    // Add subcard button
+    const addBtnEl = cardEl.querySelector('.btn-add');
+    if (addBtnEl) {
+      addBtnEl.addEventListener('click', () => {
+        childrenDiv.style.display = 'block';
+
+        // Reuse existing subFormDiv or create one
+        let subFormDiv = childrenDiv.querySelector('.sub-form-div');
+        if (!subFormDiv) {
+          subFormDiv = document.createElement('div');
+          subFormDiv.className = 'sub-form-div';
+          childrenDiv.prepend(subFormDiv);
+        }
+
+      function openSubForm() {
+        subFormDiv = document.createElement('div');
+        subFormDiv.className = 'sub-form-div';
+        childrenDiv.appendChild(subFormDiv);
+        renderForm(subFormDiv, (title, dueDate, timeNeeded) => {
+          const newCard = makeCard(title, dueDate, timeNeeded);
+          card.children.push(newCard);
+          saveData(cards_root);
+          subFormDiv.remove();
+          appendCardToContainer(newCard, childrenDiv, depth + 1);
+          openSubForm();
+        }, () => {
+          if (!card.children.length) childrenDiv.style.display = 'none';
+        });
+      }
+
+        openSubForm();
+      });
+    }
+  }
+
+  let cards_root = [];
 
   function render() {
     const tree = document.getElementById('tree');
@@ -439,12 +450,11 @@ function earliestStartDate(card, today) {
     if (cards_root.length === 0) {
       tree.innerHTML = '<p class="ct-empty">No cards yet — add one above to get started.</p>';
     } else {
-      renderTree(cards_root, tree, 0);
+      cards_root.forEach(card => appendCardToContainer(card, tree, 0));
     }
     if (timelineVisible) renderTimeline(cards_root);
   }
 
-  // Timeline toggle
   document.getElementById('timelineToggle').addEventListener('click', () => {
     timelineVisible = !timelineVisible;
     const section = document.getElementById('timelineSection');
@@ -452,10 +462,7 @@ function earliestStartDate(card, today) {
     if (timelineVisible) {
       section.style.display = 'block';
       btn.innerHTML = '<i class="ti ti-timeline" style="font-size:13px;"></i> Hide timeline';
-      // Initialize visibility for any top-level cards not yet tracked
-      cards_root.forEach(card => {
-        if (!(card.id in tlVisibility)) tlVisibility[card.id] = true;
-      });
+      cards_root.forEach(card => { if (!(card.id in tlVisibility)) tlVisibility[card.id] = true; });
       renderTimeline(cards_root);
     } else {
       section.style.display = 'none';
@@ -464,17 +471,38 @@ function earliestStartDate(card, today) {
   });
 
   function openRootForm() {
-    renderForm('formRoot', (title, dueDate, timeNeeded) => {
-      cards_root.push(makeCard(title, dueDate, timeNeeded));
+    const formRoot = document.getElementById('formRoot');
+    renderForm(formRoot, (title, dueDate, timeNeeded) => {
+      const newCard = makeCard(title, dueDate, timeNeeded);
+      cards_root.push(newCard);
       saveData(cards_root);
-      render();
+
+      // Remove empty state if present
+      const tree = document.getElementById('tree');
+      const empty = tree.querySelector('.ct-empty');
+      if (empty) empty.remove();
+
+      // Append just the new root card — no full re-render
+      appendCardToContainer(newCard, tree, 0);
+
+      // Auto-open next root form
       openRootForm();
     }, null);
   }
 
-document.getElementById('addRootBtn').addEventListener('click', openRootForm);
+  document.getElementById('addRootBtn').addEventListener('click', openRootForm);
 
-  render();
+  async function init() {
+    cards_root = loadLocalData();
+    render();
+    const remote = await dbLoad();
+    if (remote !== null) {
+      cards_root = remote;
+      render();
+    }
+  }
+
+  init();
 </script>
 </body>
 </html>
