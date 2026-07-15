@@ -28,7 +28,25 @@
   .ct-card.d4 { border-left: 2px solid #D4537E; }
   .ct-card.done { opacity: 0.5; }
   .ct-card.done .ct-card-title { color: #1D9E75; }
-  .btn-done.is-done { color: #1D9E75; }
+  .btn-done {
+      width: 20px;
+      height: 20px;
+      border-radius: 50% !important;
+      border: 1.5px solid #d4d4d2 !important;
+      display: flex !important;
+      align-items: center;
+      justify-content: center;
+      padding: 0 !important;
+      font-size: 11px !important;
+      flex-shrink: 0;
+      margin-top: 2px;
+      background: #fff !important;
+      transition: all 0.15s;
+    }
+    .btn-done:hover { border-color: #1D9E75 !important; color: #1D9E75 !important; background: #fff !important; }
+    .btn-done.is-done { background: #1D9E75 !important; border-color: #1D9E75 !important; color: #fff !important; }
+  .btn-del { color: #888; }
+  .btn-del:hover { color: #c0392b !important; background: #fdf0f0 !important; }
   .ct-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
   .ct-card-title { font-size: 14px; font-weight: 500; color: #1a1a1a; margin: 0 0 6px; }
   .ct-card-meta { display: flex; gap: 12px; }
@@ -197,7 +215,17 @@
     const own = card.timeNeeded || 5;
     return card.children.reduce((total, child) => total + sumTime(child), own);
   }
-
+   function deleteCard(cards, id) {
+    const index = cards.findIndex(c => c.id === id);
+    if (index !== -1) {
+      cards.splice(index, 1);
+      return true;
+    }
+    for (const card of cards) {
+      if (deleteCard(card.children, id)) return true;
+    }
+    return false;
+  } 
   function setDoneRecursive(card, done) {
     card.done = done;
     card.children.forEach(child => setDoneRecursive(child, done));
@@ -303,6 +331,42 @@
 
   // ── FORM ──
 
+    function renderDeleteConfirm(container, card, onConfirm, onCancel) {
+    container.innerHTML = `
+      <div class="ct-form" style="background:#fdf0f0; border-color:#f5c0c0;">
+        <p style="font-size:14px; margin:0; color:#1a1a1a;">
+          Delete <strong>${card.title}</strong>${card.children.length ? ` and its ${card.children.length} sub-card(s)` : ''}?
+        </p>
+        <div class="ct-form-actions">
+          <button class="del-cancel">Cancel</button>
+          <button class="del-confirm primary" style="background:#c0392b; border-color:#c0392b;">Delete</button>
+        </div>
+      </div>`;
+
+    const confirmBtn = container.querySelector('.del-confirm');
+    const cancelBtn = container.querySelector('.del-cancel');
+
+    // Focus confirm so user can hit Enter to delete
+    confirmBtn.focus();
+
+    confirmBtn.addEventListener('keydown', e => {
+      if (e.key === 'Enter') confirmBtn.click();
+      if (e.key === 'Escape') cancelBtn.click();
+    });
+
+    confirmBtn.addEventListener('click', () => {
+      container.innerHTML = '';
+      onConfirm();
+    });
+
+    cancelBtn.addEventListener('click', () => {
+      container.innerHTML = '';
+      onCancel && onCancel();
+    });
+  }
+
+
+
   function renderForm(container, onSave, onCancel, defaults = {}) {
     if (typeof container === 'string') container = document.getElementById(container);
     if (!container) return;
@@ -360,15 +424,21 @@
     const addBtn = depth < MAX_DEPTH
       ? `<button class="btn-add" aria-label="Add sub-card"><i class="ti ti-plus"></i></button>` : '';
     const doneBtn = `<button class="btn-done ${card.done ? 'is-done' : ''}" aria-label="Mark done"><i class="ti ti-check"></i></button>`;
+    const delBtn = `<button class="btn-del" aria-label="Delete card"><i class="ti ti-trash"></i></button>`;
 
-    cardEl.innerHTML = `
-      <div class="ct-card d${depth} ${card.done ? 'done' : ''}">
-        <div class="ct-card-header">
-          <p class="ct-card-title">${card.title}</p>
-          <div class="ct-actions">${doneBtn}${addBtn}</div>
-        </div>
-        <div class="ct-card-meta">${metaDate}${metaTime}</div>
-      </div>`;
+      cardEl.innerHTML = `
+        <div class="ct-card d${depth} ${card.done ? 'done' : ''}">
+          <div class="ct-card-header">
+            <div style="display:flex; align-items:flex-start; gap:8px; flex:1; min-width:0;">
+              ${doneBtn}
+              <div style="flex:1; min-width:0;">
+                <p class="ct-card-title">${card.title}</p>
+                <div class="ct-card-meta">${metaDate}${metaTime}</div>
+              </div>
+            </div>
+            <div class="ct-actions">${addBtn}${delBtn}</div>
+          </div>
+        </div>`;
 
     // Insert: cardEl, then formDiv, then childrenDiv (passed in from parent)
     return { cardEl, formDiv };
@@ -393,6 +463,14 @@
       setDoneRecursive(card, !card.done);
       saveData(cards_root);
       render();
+    });
+
+    cardEl.querySelector('.btn-del').addEventListener('click', () => {
+      renderDeleteConfirm(formDiv, card, () => {
+        deleteCard(cards_root, card.id);
+        saveData(cards_root);
+        render();
+      }, null);
     });
 
     // Click card to edit
