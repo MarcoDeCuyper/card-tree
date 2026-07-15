@@ -96,7 +96,9 @@
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#1D9E75" />
   <link rel="apple-touch-icon" href="icon.svg" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
+
 <body>
 <div class="ct-wrap">
   <div class="ct-toolbar">
@@ -597,49 +599,22 @@
 
   init();
 
-    // ── SUPABASE REALTIME ──
-    // Opens a websocket connection to Supabase and listens for changes
-    // to the cards table. When a change arrives, reload the data.
+  // ── SUPABASE REALTIME (official client) ──
+      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    const realtimeUrl = SUPABASE_URL.replace('https://', 'wss://') + '/realtime/v1/websocket?apikey=' + SUPABASE_KEY + '&vsn=1.0.0';
-    const socket = new WebSocket(realtimeUrl);
-    let heartbeatInterval;
-
-    socket.addEventListener('open', () => {
-      // Join the cards table channel
-      socket.send(JSON.stringify({
-        topic: 'realtime:public:cards',
-        event: 'phx_join',
-        payload: {},
-        ref: '1'
-      }));
-
-      // Supabase requires a heartbeat every 30 seconds to keep the connection alive
-      heartbeatInterval = setInterval(() => {
-        socket.send(JSON.stringify({
-          topic: 'phoenix',
-          event: 'heartbeat',
-          payload: {},
-          ref: '2'
-        }));
-      }, 30000);
-    });
-
-    socket.addEventListener('message', async (event) => {
-      const msg = JSON.parse(event.data);
-      // Only react to actual database change events, not join confirmations or heartbeats
-      if (msg.event === 'INSERT' || msg.event === 'UPDATE' || msg.event === 'DELETE') {
-        const remote = await dbLoad();
-        if (remote !== null) {
-          cards_root = remote;
-          render();
-        }
-      }
-    });
-
-    socket.addEventListener('close', () => {
-      clearInterval(heartbeatInterval);
-    });
+      supabase
+        .channel('cards-changes')
+        .on('postgres_changes',
+          { event: '*', schema: 'public', table: 'cards' },
+          async (payload) => {
+            const remote = await dbLoad();
+            if (remote !== null) {
+              cards_root = remote;
+              render();
+            }
+          }
+        )
+        .subscribe();
 
 
     // Register service worker for PWA
